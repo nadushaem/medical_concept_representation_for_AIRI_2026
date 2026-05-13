@@ -1,7 +1,7 @@
 import warnings
 import torch
 from torch.optim.lr_scheduler import _LRScheduler, OneCycleLR
-from gradient_descent_the_ultimate_optimizer import gdtuo
+import torch.optim as optim
 from pytorch_lightning.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
@@ -10,23 +10,22 @@ from pytorch_lightning.callbacks import (
 
 
 def select_optimizer(model, train_params):
-    # Hyper-(hyper-)optimization with gdtuo python package
-    if "hyper" in train_params["optimizer"]:
-        # Select hyper optimization given tower level (e.g., 2 for "hyper-2")
-        hyper_optim = gdtuo.NoOpOptimizer()
-        hyper_level = int(train_params["optimizer"].split("hyper-")[-1])
-        hyper_lr = train_params["hyper_lr"] / (10 ** hyper_level)
-        for _ in range(hyper_level):
-            hyper_lr *= 10
-            hyper_optim = gdtuo.AdamBaydin(alpha=hyper_lr,
-                                           optimizer=hyper_optim)
-        
-        # Build model optimizer wrapped into hyper-optimization pipeline
-        optim = gdtuo.Adam(alpha=train_params["lr"], optimizer=hyper_optim)
-        hyper_optim_wrapper = gdtuo.ModuleWrapper(model, optimizer=optim)
-        hyper_optim_wrapper.initialize()
-        dummy_optim = torch.optim.Adam([torch.empty(0)])
-        return hyper_optim_wrapper, dummy_optim
+    optimizer_name = train_params.get("optimizer", "adam").lower()
+    lr = train_params.get("lr", 1e-3)
+
+    if "adamw" in optimizer_name:
+        optimizer = optim.AdamW(model.parameters(), lr=lr)
+
+    elif "adam" in optimizer_name:
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+
+    elif "sgd" in optimizer_name:
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+
+    else:
+        raise ValueError(f"Unknown optimizer: {optimizer_name}")
+
+    return optimizer
 
     # Classic optimization
     optim_params = {"params": model.parameters(),

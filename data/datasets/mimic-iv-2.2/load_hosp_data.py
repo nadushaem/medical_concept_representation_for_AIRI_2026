@@ -8,7 +8,7 @@ def load_admission_data(path_mimic_iv_hosp_dir: str,
     """
     print('Loading data for patient admissions')
     df_admissions = pd.read_csv(
-        os.path.join(path_mimic_iv_hosp_dir, 'admissions.csv.gz'),
+        os.path.join(path_mimic_iv_hosp_dir, 'admissions.csv'),
         usecols=[
             'subject_id',
             'hadm_id',
@@ -37,7 +37,7 @@ def load_patient_data(path_mimic_iv_hosp_dir: str,
     """
     print('Loading data for patient demographics')
     df_patients = pd.read_csv(
-        os.path.join(path_mimic_iv_hosp_dir, 'patients.csv.gz'),
+        os.path.join(path_mimic_iv_hosp_dir, 'patients.csv'),
         usecols=[
             'subject_id',
             'gender',
@@ -63,7 +63,7 @@ def load_location_data(path_mimic_iv_hosp_dir: str,
     """
     print('Loading data for patient locations')
     df_locations = pd.read_csv(
-        os.path.join(path_mimic_iv_hosp_dir, 'transfers.csv.gz'),
+        os.path.join(path_mimic_iv_hosp_dir, 'transfers.csv'),
         usecols=[
             'subject_id',
             'hadm_id',
@@ -87,7 +87,7 @@ def load_diagnosis_data(path_mimic_iv_hosp_dir: str,
     """
     print('Loading data for diagnoses')
     df_diagnoses = pd.read_csv(
-        os.path.join(path_mimic_iv_hosp_dir, 'diagnoses_icd.csv.gz'),
+        os.path.join(path_mimic_iv_hosp_dir, 'diagnoses_icd.csv'),
         usecols=[
             'subject_id',
             'hadm_id',
@@ -113,7 +113,7 @@ def load_procedure_data(path_mimic_iv_hosp_dir: str,
     # Hosp data for procedure to icd conversion
     print('Loading data for procedures')
     df_procedures = pd.read_csv(
-        os.path.join(path_mimic_iv_hosp_dir, 'procedures_icd.csv.gz'),
+        os.path.join(path_mimic_iv_hosp_dir, 'procedures_icd.csv'),
         usecols=[
             'subject_id',
             'hadm_id',
@@ -141,7 +141,7 @@ def load_medication_data(path_mimic_iv_hosp_dir: str,
     # Hosp data for prescriptions (this step takes about 1 minute)
     print('Loading data for medication (quite long step: big file)')
     df_prescription_chunks = pd.read_csv(
-        os.path.join(path_mimic_iv_hosp_dir, 'prescriptions.csv.gz'),
+        os.path.join(path_mimic_iv_hosp_dir, 'prescriptions.csv'),
         usecols=[
             'subject_id',
             'hadm_id',
@@ -172,7 +172,7 @@ def load_labevent_data(path_mimic_iv_hosp_dir: str,
     # Hosp data for lab events (this step takes about 10 minutes)
     print('Loading data for lab events (long step: very big file)')
     df_labevent_chunks = pd.read_csv(
-        os.path.join(path_mimic_iv_hosp_dir, 'labevents.csv.gz'),
+        os.path.join(path_mimic_iv_hosp_dir, 'labevents.csv'),
         usecols=[
             'subject_id',
             'hadm_id',

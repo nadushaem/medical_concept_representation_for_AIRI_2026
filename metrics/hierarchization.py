@@ -1,19 +1,28 @@
 import torch
 import numpy as np
-import cuml.cluster.hdbscan as cuml_hdbscan  # import hdbscan
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+
 import data
 import pytorch_lightning as pl
+
 from adjustText import adjust_text
-from hdbscan import flat  # only available in CPU version
-from cuml import PCA  # from sklearn.decomposition import PCA
-from cuml import TSNE  # from sklearn.manifold import TSNE
+
+import hdbscan
+
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+
 from metrics.metric_utils import (
     compute_reduced_representation,
     log_figure_to_board,
 )
+
 from scipy.optimize import linear_sum_assignment
+
+from sklearn.cluster import AgglomerativeClustering
+
 from sklearn.metrics import (
     adjusted_rand_score,
     normalized_mutual_info_score,
@@ -70,31 +79,34 @@ def hierachization_task(
     
 
 def get_cluster_info(token_info, fixed_n_clusters=True):
-    """ ...
-    """
-    # Find cluster affordances based on cluster hierarchy
-    clusterer = cuml_hdbscan.HDBSCAN(min_cluster_size=MIN_CLUSTER_SIZE)
+    clusterer = hdbscan.HDBSCAN(min_cluster_size=MIN_CLUSTER_SIZE)
     clusterer.fit(token_info['data'])
-    unique_classes = sorted(list(set(token_info['class_lbls'])))
+    labels = clusterer.labels_
+
+    unique_classes = sorted(set(labels))
+
     if fixed_n_clusters:
-        try:
-            n_clusters = len([
-                c for c in unique_classes
-                if token_info['class_lbls'].count(c) > MIN_CLUSTER_SIZE
-            ])
-            clusterer = flat.HDBSCAN_flat(
-                token_info['data'],
-                n_clusters=n_clusters,
-                clusterer=clusterer
-            )
-        except IndexError:
-            print(' - Clustering algorithm did not converge!')
+        # убираем noise
+        valid_clusters = [
+            c for c in unique_classes
+            if c != -1 and list(labels).count(c) > MIN_CLUSTER_SIZE
+        ]
+
+        n_clusters = len(valid_clusters)
+
+        if n_clusters <= 1:
+            print(" - Not enough clusters found")
             return None
-            
-    # Return everything needed
-    return {'clusterer': clusterer,
-            'cluster_lbls': clusterer.labels_,
-            'n_clusters': n_clusters}
+
+        clusterer = AgglomerativeClustering(n_clusters=n_clusters)
+        clusterer.fit(token_info['data'])
+
+        labels = clusterer.labels_
+
+    return {
+        "labels": labels,
+        "n_clusters": len(set(labels))
+    }
 
 
 def plot_hierarchy(token_info, cluster_info, axs, cat, cat_idx):
@@ -155,7 +167,7 @@ def plot_hierarchy(token_info, cluster_info, axs, cat, cat_idx):
 
 def add_cluster_info(
     ax: plt.Axes,
-    clusterer: cuml_hdbscan.HDBSCAN,
+    clusterer: hdbscan.HDBSCAN,
     n_clusters: int,
     cluster_colors: list[np.ndarray]
 ) -> None:

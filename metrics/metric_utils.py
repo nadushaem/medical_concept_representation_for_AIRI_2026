@@ -2,27 +2,24 @@ import io
 import gc
 import re
 import subprocess
-import cupy as cp
+
+import numpy as cp
 import numpy as np
-import wandb
-# import rsatoolbox
+
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
-import dask.array as da
+
 from typing import Callable
 from tqdm import tqdm
 from PIL import Image
-from cuml import TSNE as cumlTSNE
-from cuml import PCA as cumlPCA
-from cupyx.scipy.spatial.distance import cdist as cupy_cdist
-# from scipy.spatial.distance import squareform
+
+from scipy.spatial.distance import cdist
 from sklearn.preprocessing import StandardScaler
-from dask_ml.decomposition import IncrementalPCA as daskIncrementalPCA
-from dask_cuda import LocalCUDACluster
-from dask.distributed import LocalCluster, Client
-from cuml.metrics import (
-    roc_auc_score as cuml_roc_auc_score,
-    precision_recall_curve as cuml_precision_recall_curve,
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from sklearn.metrics import (
+    roc_auc_score,
+    precision_recall_curve,
 )
 
 
@@ -40,17 +37,11 @@ def log_figure_to_board(
     fig.savefig(buffer, dpi=300, format="png")
     buffer.seek(0)
     with Image.open(buffer) as img: image = np.array(img)
-    logger.experiment.log({title: [wandb.Image(image, caption=title)]})
 
 
 def clean_memory_fn():
-    """ Try to remove unused variables in GPU and CPU, after each model run
-    """
+    """Clean CPU memory after model run."""
     gc.collect()
-    mempool = cp.get_default_memory_pool()
-    pinned_mempool = cp.get_default_pinned_memory_pool()
-    mempool.free_all_blocks()
-    pinned_mempool.free_all_blocks()
 
 
 def clean_memory():
@@ -93,7 +84,7 @@ def compute_reduced_representation(
         "n_neighbors": 32,  # Canny-lab's t-SNE default
         "learning_rate_method": "none",  # Canny-lab's t-SNE default
     }
-    tsne = cumlTSNE(**params)
+    tsne = TSNE(**params)
     return tsne.fit_transform(data)
 
 
@@ -107,11 +98,11 @@ def rdm(
         *** Not used in metric_utils.py for now! ***
     """
     print("Computing representational sample dissimilarity matrix")
-    distance_matrix = cupy_cdist(data, metric).get()
+    distance_matrix = cdist(data, metric).get()
     
     if retrieve_dim:
         print("Running PCA to retrieve original dimension from RDM")
-        pca = cumlPCA(n_components=data.shape[1])
+        pca = PCA(n_components=data.shape[1])
         return pca.fit_transform(distance_matrix)
     else:
         return distance_matrix
@@ -130,39 +121,6 @@ def rdm_with_dask(
     chunk_size = n_rows_per_gpu_chunk * max(n_rows_per_gpu_chunk, data.shape[1])
     used_memory = chunk_size * data.itemsize / (10 ** 9) * 4
     usable_devices = [k for k, v in get_gpu_memory().items() if v > used_memory]
-    
-    # Compute RDM on GPU using a local CUDA cluster
-    print("Computing RDM using GPU indices %s" % usable_devices)
-    with LocalCUDACluster(CUDA_VISIBLE_DEVICES=usable_devices) as cluster:
-        with Client(cluster, timeout="240s"):
-            dask_data = da.from_array(
-                data,
-                chunks=(n_rows_per_gpu_chunk, data.shape[1]),
-            )
-            def distance_fn(chunk):
-                return cupy_cdist(chunk, data, metric=metric).get()
-            rdm_dask = dask_data.map_blocks(distance_fn, dtype=float)
-            rdm = rdm_dask.compute()
-    
-    # # Compute RDM on CPU with the rsa-toolbox
-    # print("Computing RDM using the rsa-toolbox")
-    # rsa_data = rsatoolbox.data.Dataset(data)
-    # rsa_results = rsatoolbox.rdm.calc_rdm(rsa_data, method=metric)
-    # rdm = squareform(rsa_results.dissimilarities.squeeze())
-    
-    # Use local cluster to compute PCA in an incremental way
-    print("Running PCA on CPU to retrieve original dimension")
-    if retrieve_dim:
-        with LocalCluster() as cluster:
-            with Client(cluster, timeout="240s"):
-                rdm_dask = da.from_array(rdm, chunks=(1_000, rdm.shape[1]))
-                pca = daskIncrementalPCA(n_components=data.shape[1])
-                reduced_rdm_dask = pca.fit_transform(rdm_dask)
-                return reduced_rdm_dask.compute()
-            
-    # Or return full RDM
-    else:
-        return rdm
     
     
 def bootstrap(
@@ -274,15 +232,18 @@ def bootstrap_metric_ci(
 
 
 def bootstrap_auroc_ci(
-    trues: np.ndarray,
-    scores: np.ndarray,
-    **kwargs,
+        trues: np.ndarray,
+        scores: np.ndarray,
+        **kwargs,
 ) -> tuple[float]:
-    """ Boostrapping procedure for AUROC computation
-    """
-    good_device_index = cp.cuda.runtime.getDeviceCount() - 1
-    with cp.cuda.Device(good_device_index):
-        return bootstrap_metric_ci(trues, scores, cuml_roc_auc_score, **kwargs)
+    """Bootstrapping procedure for AUROC computation."""
+
+    return bootstrap_metric_ci(
+        trues,
+        scores,
+        roc_auc_score,
+        **kwargs,
+    )
     
 
 def bootstrap_auprc_ci(
@@ -290,41 +251,49 @@ def bootstrap_auprc_ci(
     scores: np.ndarray,
     **kwargs,
 ) -> tuple[float]:
-    """ Boostrapping procedure for AUPRC computation
-    """
-    good_device_index = cp.cuda.runtime.getDeviceCount() - 1
-    with cp.cuda.Device(good_device_index):
-        return bootstrap_metric_ci(trues, scores, cuml_pr_auc_score, **kwargs)
-    
-    
-def cuml_pr_auc_score(
-    trues: cp.ndarray,
-    scores: cp.ndarray,
+    """Bootstrapping procedure for AUPRC computation."""
+
+    return bootstrap_metric_ci(
+        trues,
+        scores,
+        pr_auc_score,
+        **kwargs,
+    )
+
+
+def pr_auc_score(
+    trues: np.ndarray,
+    scores: np.ndarray,
     **kwargs,
 ) -> float:
-    """ Function that computes AUPRC with CuML
-        Taken from: https://github.com/rapidsai/cuml/issues/3311
-    """
-    precision, recall, _ = cuml_precision_recall_curve(trues, scores, **kwargs)
-    return -cp.sum(cp.diff(recall) * cp.array(precision)[:-1])
+    """Compute AUPRC on CPU."""
+
+    precision, recall, _ = precision_recall_curve(
+        trues,
+        scores,
+        **kwargs,
+    )
+
+    return -np.sum(np.diff(recall) * np.array(precision)[:-1])
 
 
 def bootstrap_rate_reduction_ci(
     labels: list,
-    embeddings: np.array,
+    embeddings: np.ndarray,
     **kwargs,
 ) -> tuple[float]:
-    """ Boostrapping procedure for rate reduction computation, done without using
-        the BLB procedure, which would not preserve rate reduction!!
-    """
+    """Bootstrapping procedure for rate reduction computation."""
+
     classes = sorted(list(set(labels)))
     label_indices = np.array([classes.index(l) for l in labels])
-    good_device_index = cp.cuda.runtime.getDeviceCount() - 1
-    with cp.cuda.Device(good_device_index):
-        return bootstrap_metric_ci(
-            label_indices, embeddings, rate_reduction_score,
-            use_bag_of_little_bootstraps=False, **kwargs,
-        )
+
+    return bootstrap_metric_ci(
+        label_indices,
+        embeddings,
+        rate_reduction_score,
+        use_bag_of_little_bootstraps=False,
+        **kwargs,
+    )
 
 
 def rate_reduction_score(label_indices, embeddings):

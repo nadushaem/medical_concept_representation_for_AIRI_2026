@@ -47,7 +47,7 @@ MED_MAP = pd.read_csv(
     }
 )
 LAB_MAP = pd.read_csv(
-    os.path.join(DIR_MIMIC_IV, 'hosp', 'd_labitems.csv.gz'),
+    os.path.join(DIR_MIMIC_IV, 'hosp', 'd_labitems.csv'),
     usecols=['itemid', 'label'],
     dtype={'itemid': pd.StringDtype(), 'label': pd.StringDtype()},
 )

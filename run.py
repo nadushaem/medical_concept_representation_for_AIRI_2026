@@ -4,14 +4,15 @@ import models
 import data
 import metrics
 import train_utils
-import wandb
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from pytorch_lightning.utilities.warnings import PossibleUserWarning
+from pytorch_lightning.loggers import TensorBoardLogger
 import warnings
 warnings.filterwarnings("ignore", category=PossibleUserWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
+logger = TensorBoardLogger("logs/")
 
 DEFAULT_CONFIG_PATH = os.path.join("configs", "base_config.toml")
 PARSER = argparse.ArgumentParser(description="Train and test model.")
@@ -233,10 +234,14 @@ def test(
 if __name__ == "__main__":
     """ Train or test a model, depending on TEST_MODE argument
     """
+    logger = TensorBoardLogger("logs/")
+
     setup_output = setup()
+
+    # добавляем logger в общий dict конфигурации
+    setup_output["logger"] = logger
+
     if not TEST_MODE:
         train(**setup_output)
     else:
         test(**setup_output)
-    wandb.finish()  # still useful?
-    

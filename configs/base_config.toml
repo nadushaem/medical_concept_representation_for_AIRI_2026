@@ -27,7 +27,7 @@
   subsample_mimic = false
 
 [train]
-  optimizer = 'hyper'  # 'adam', 'radam', 'adamw', 'hyper'
+  optimizer = 'adam'  # 'adam', 'radam', 'adamw', 'hyper'
   scheduler = 'onecycle'  # 'noam', 'linear', 'onecycle' (not used if optimizer == 'hyper')
   lr = 0.001  # initial learning rate for model parameters (after warmup)
   hyper_lr = 0.001  # initial learning rate for hyper optimization (only used if optimier == 'hyper')

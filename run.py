@@ -232,14 +232,8 @@ def test(
     
 
 if __name__ == "__main__":
-    """ Train or test a model, depending on TEST_MODE argument
-    """
-    logger = TensorBoardLogger("logs/")
-
+    """ Train or test a model, depending on TEST_MODE argument"""
     setup_output = setup()
-
-    # добавляем logger в общий dict конфигурации
-    setup_output["logger"] = logger
 
     if not TEST_MODE:
         train(**setup_output)

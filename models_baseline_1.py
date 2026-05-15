@@ -352,7 +352,6 @@ def print_per_model_results(model_name: str, results: dict) -> None:
             print(f"{p:>5.1f} | {task:<15} | {auroc:>14} | {auprc:>14} | {counts:>10}")
 
 
-
 def main(data_dir: str) -> None:
     """Главный пайплайн."""
     train_path = os.path.join(data_dir, "train.json")
